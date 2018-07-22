@@ -11,7 +11,7 @@ Sometimes I collect data as a vector of matrices, or a vector of those, and some
 Then I make lots of mistakes about which dimensions are which.
 So because I had more important things to do, I thought I'd write a simple package to remember their names for me.
 
-```
+```julia
 using DimArrays
 
 list = [];
@@ -27,7 +27,7 @@ mean(list3, :iter)  ## equivalent to squeeze(mean(list3,3),3)
 
 And for quick-and-dirty plots, I want the axes & series labelled
 so that I know which is which, and can quickly decide if I need a transpose:
-```
+```julia
 using Plots
 
 plot(slicedim(list3, :b, 1)' , legend=:bottomright)
@@ -38,7 +38,7 @@ Besides each dimension's name (a Symbol, strings will be converted) it can also 
 which is used in plotting to scale the axes etc. (But only the output, `getindex` uses original integer indices).
 You can pass a number by which to scale the index, or a dictionary, instead of a function.
 For example, this plots data sampled every 4 iterations correctly over the above:
-```
+```julia
 saveevery = 4
 list4 = DimArray([], :iter, saveevery);  ## equivalent to function  i->4i
 for i=1:33
