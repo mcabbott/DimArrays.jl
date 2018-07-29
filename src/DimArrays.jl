@@ -433,51 +433,47 @@ end
 ### Display ###
 ###############
 
-## TODO change to extending summary()
+function Base.show(io::IO, a::DimArray)
+    print(io, "DimArray(")
+    show(io, a.array)
+    for d=1:ndims(a)
+        a.dnames[d]!= nothing && print(io, ", :",dname(a,d))
+    end
+    haslabel(a) && print(io, "; label = :", label(a))
+    print(io, ")")
+end
 
-function Base.showarray(io::IO, a::DimArray, repr::Bool = true; header = true)
-    if repr ## compact
-        print(io, "DimArray(")
-        Base.showarray(io, a.array, true)
-        for d=1:ndims(a)
-            print(io, ", :",dname(a,d))
+pushln!(v::Vector,  more...) = push!(v, more..., '\n')
+
+function Base.summary(a::DimArray)
+    out = []
+    lab = haslabel(a) ? ", label = "*string(label(a))*"," : ""
+    if typeof(a.array) <: Array
+        ndims(a)==0 && pushln!(out, "DimArray{",eltype(a),"}$lab of zero dimensions:")
+        ndims(a)==1 && pushln!(out, "DimVector{",eltype(a),"}$lab with dimension:")
+        ndims(a)==2 && pushln!(out, "DimMatrix{",eltype(a),"}$lab with dimensions:")
+        ndims(a)>=3 && pushln!(out, "DimArray{",eltype(a),",",ndims(a),"}$lab with dimensions:")
+    elseif typeof(a.array) <: RowVector
+        pushln!(out, "DimRowVector{",eltype(a),"} with dimensions:")
+    else
+        pushln!(out, summary(a.array), " wrapped in a DimArray with:")
+    end
+    for d=1:ndims(a)
+        if a.dnames[d]==nothing #|| a.dnames[d]==:transpose
+                    push!(out, "   ⭒ ") ## different symbol for default names
+        elseif d==1 push!(out, "   ⬙ ") ## ⇁⇂
+        elseif d==2 push!(out, "   ⬗ ")
+        else        push!(out, "   ◇ ")
         end
-        haslabel(a) && print(io, ", :", label(a))
-        print(io, ")")
-    else ## full
-        lab = haslabel(a) ? ", label = "*string(label(a))*"," : ""
-        if typeof(a.array) <: Array
-            ndims(a)==0 && println(io, "DimArray{",eltype(a),"}$lab of zero dimensions:")
-            ndims(a)==1 && println(io, "DimVector{",eltype(a),"}$lab with dimension:")
-            ndims(a)==2 && println(io, "DimMatrix{",eltype(a),"}$lab with dimensions:")
-            ndims(a)>=3 && println(io, "DimArray{",eltype(a),",",ndims(a),"}$lab with dimensions:")
-        elseif typeof(a.array) <: RowVector
-            println(io, "DimRowVector{",eltype(a),"} with dimensions:")
-        else
-            println(io, summary(a.array), " wrapped in a DimArray with:")
+        push!(out, rpad(string(dname(a,d)),4)," = ", stringfew(size(a,d)), " ")
+        if ifunc(a,d)!=identity
+            push!(out, " ⟹   ", stringfew(size(a,d), ifunc(a,d)), " ")
         end
-        for d=1:ndims(a)
-            if a.dnames[d]==nothing #|| a.dnames[d]==:transpose
-                        print("   ⭒ ") ## different symbol for default names
-            elseif d==1 print(io, "   ⬙ ") ## ⇁⇂
-            elseif d==2 print(io, "   ⬗ ")
-            else        print(io, "   ◇ ")
-            end
-            print(io, rpad(string(dname(a,d)),4)," = ", stringfew(size(a,d)) )
-            if ifunc(a,d)!=identity
-                println(io, "  ⟹   ", stringfew(size(a,d), ifunc(a,d)))
-            else
-                println(io, "")
-            end
-        end
-        if eltype(a) <: Union{Number, String, Char}
-            ndims(a)>=3 && println("")
-            Base.showarray(io, a.array, false; header=false)
-        elseif length(a) >= 1
-            println(io, "The first element is [", repeated("1,", ndims(a)-1)...,"1] = " )
-            show(io,"text/plain", first(a))
+        if d<ndims(a)
+            pushln!(out, "")
         end
     end
+    join(out)
 end
 
 function stringfew(n, f=identity)
