@@ -1,9 +1,11 @@
 module DimArrays
 
+export DimArray, DimVector, DimMatrix, dictvector, nest
+
 const NameEl = Union{Symbol,Void}
 const FuncEl = Union{Function,Dict,Void}
 
-struct DimArray{T,N,TT} <: AbstractArray{T,N}
+mutable struct DimArray{T,N,TT} <: AbstractArray{T,N}
     array::TT
     dnames::NTuple{N,NameEl}    ## dimension names: symbol or nothing
     ifuncs::NTuple{N,FuncEl}    ## index functions: dictionary if bounded
@@ -33,7 +35,12 @@ function defname(d::Int)
     d==4 && return Symbol(:dim,d)
 end
 
-ifunc(a::DimArray, d::Int) = a.ifuncs[d]==nothing ? identity : a.ifuncs[d]
+function ifunc(a::DimArray, d::Int)
+    ifun = a.ifuncs[d]
+    ifun==nothing && return identity
+    ifun isa Dict && return n -> haskey(ifun,n) ? ifun[n] : n
+    return ifun
+end
 ifunc(a::AbstractArray, d::Int) = identity
 ifuncs(a::AbstractArray) = [ ifunc(a,d) for d=1:ndims(a) ]
 
@@ -48,11 +55,9 @@ using Lazy: @forward
 ### Constructors ###
 ####################
 
-export DimArray, DimVector, DimMatrix
-
-ensurefunc(f::Function) = f
-ensurefunc(f::Dict) = i -> f[i]
-ensurefunc(f::Number) = f==1 ? identity : (i -> i*f)
+ensurefuncordict(f::Function) = f
+ensurefuncordict(f::Dict) = f ## ifunc handles this
+ensurefuncordict(f::Number) = f==1 ? identity : (i -> i*f)
 
 using Base.Iterators: repeated
 
@@ -74,7 +79,7 @@ function DimArray(x::TT, tup::Vararg; label = nothing) where TT<:AbstractArray{T
     for z in tup
         if isa(z, FuncOrNumberOrDict)
             if f<N
-                funcs[f += 1] = ensurefunc(z)
+                funcs[f += 1] = ensurefuncordict(z)
             else
                 warn("DimArray is ignoring function $z")
             end
@@ -137,13 +142,38 @@ DimVector(s::SymbolOrString, rest...) = DimArray([], s, rest...)
 DimArray(x::TT, dnames::Tuple, ifuncs::Tuple, cname::NameEl) where TT <: AbstractArray{T,N} where {T,N} =
     DimArray{T,N,TT}(x, dnames, ifuncs, cname);
 
+"""
+    dictvector(vec, [:first, :second, ...]) = DimVector(vec, Dict(1 => :first, 2 => :second, ...))
+    dictvector(vec, [:first, ...], :axis, :content)
+Convenient way to define a (short) `DimVector` whose index function is a dictionary labelling the entries.
+A name for the dimension / axis can be supplied too.
+"""
+function dictvector(vec::AbstractVector, isym::AbstractVector, rest...)
+    ifun = Dict(i => s for (i,s) in enumerate(isym))
+    DimVector(vec, ifun, rest...)
+end
+
 
 ### One-array operations ###
 ############################
 
 import Base: push!, map, map!
 
-push!(a::DimVector, x) = begin push!(a.array, x); a end
+push!(a::DimVector, x...) = begin push!(a.array, x...); a end
+
+function push!(a::DimVector, x, s::SymbolOrString)
+    push!(a.array, x)
+    if a.ifuncs[1]==nothing
+        a.ifuncs = (Dict{Int,String}(),)
+    end
+    if a.ifuncs[1] isa Dict
+        a.ifuncs[1][length(a)] = string(s)
+    end
+    if a.ifuncs[1] isa Function
+        warn("push! can't append index label $s as dimension index is not a Dict", once=true)
+    end
+    a
+end
 
 map!(f::Function, a::DimVector) = begin map!(f, a.array); a end
 map(f::Function, a::DimVector) = DimArray(map(f, a.array), a.dnames, a.ifuncs, a.cname)
@@ -397,8 +427,6 @@ end
 
 ### Nested Arrays ###
 #####################
-
-export nest
 
 """
     nest([A1, A2, ...])

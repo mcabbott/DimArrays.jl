@@ -35,5 +35,18 @@ b = DimArray([1.0 2; 3 4]; label=:c)
 @test maximum( nest([DimArray([1,3]), [2,4]]) .- b ) ≈ 0
 
 aabb = vcat(hcat(a,a),b,b)
+
 @test size(aabb) == (8,2)
 @test DimArrays.dnames(aabb) == [:aa, :col]
+
+push!(a, 55,66)
+@test DimArrays.ifuncs(a)[1](length(a)) == 600
+
+c = dictvector(ones(2), [:α, "β"], :ω, :N)
+
+push!(c, 77, 88)
+append!(c, [0,0])
+push!(c, 99, :γ)
+
+@test c isa DimVector
+@test sum(c, :ω)[1] ≈ 266
