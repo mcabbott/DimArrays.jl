@@ -115,10 +115,23 @@ DimArray(x::AbstractArray, a::Vector, b::Vector, label::Symbol; kw...) = DimArra
 
 DimVector(x::AbstractVector, rest...; kw...) = DimArray(x, rest...; kw...)
 DimMatrix(x::AbstractVector, rest...; kw...) = DimArray(reshape(x,:,1), rest...; kw...)
+@doc @doc(DimArray) ->
 DimMatrix(x::AbstractMatrix, rest...; kw...) = DimArray(x, rest...; kw...)
 
-DimArray(s::Symbol=:row) = DimArray([], s)
-DimVector(s::Symbol=:row) = DimArray([], s)
+"""
+    DimArray(T) = DimVector(T[])
+    DimArray(sym) = DimVector(Any[], sym)
+Empty `DimVector` into to which you can later `push!` things, optionally with a dimension name.
+"""
+DimArray(T::Type) = DimArray(T[])
+@doc @doc(DimArray) ->
+DimVector(T::Type) = DimArray(T[])
+
+DimArray(T::Type, rest...) = DimArray(T[], rest...)
+DimVector(T::Type, rest...) = DimArray(T[], rest...)
+
+DimArray(s::SymbolOrString, rest...) = DimArray([], s, rest...)
+DimVector(s::SymbolOrString, rest...) = DimArray([], s, rest...)
 
 ## avoid the above splatting for perfectly formed case, for functions below -- will fail on wrong-length tuples
 DimArray(x::TT, dnames::Tuple, ifuncs::Tuple, cname::NameEl) where TT <: AbstractArray{T,N} where {T,N} =
@@ -147,10 +160,14 @@ end
 
 rev2(tup::Tuple) = (tup[2], tup[1])
 
-function permutedims(a::DimArray, p::Vector{Int})
+permutedims(a::DimMatrix, tup::Tuple) = permutedims(a, [tup...])
+
+function permutedims(a::DimArray, p::AbstractVector{Int})
     @assert ndims(a)==length(p) "no valid permutation of dimensions"
     DimArray(permutedims(a.array, p), a.dnames[p], a.ifuncs[p], a.cname)
 end
+
+permutedims(a::DimArray, p::AbstractVector{<:SymbolOrString}) = permutedims(a, ensuredim.(p))
 
 permutedims(a::DimMatrix) = permutedims(a, [2,1])
 
