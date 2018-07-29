@@ -14,9 +14,11 @@ a = DimVector([1,2,3,4], :aa, 100)
 @test typeof( map(sqrt, a) ) <: DimVector
 @test typeof( [sqrt(i) for i in a] ) <: DimVector
 
-b = DimArray([1.0 2; 3 4])
+b = DimArray([1.0 2; 3 4]; label=:c)
 
-@test string(b) == "DimArray([1.0 2.0; 3.0 4.0], :row, :col)"
+@test string(b) == "DimArray([1.0 2.0; 3.0 4.0]; label = :c)"
+
+@test permutedims(b, (:col, :row))[1,2] ≈ 3
 
 @test sum(b, [:row,:col])[1] ≈ 10
 @test std(b, :col)[1] ≈ 0.7071067811865476
@@ -31,3 +33,7 @@ b = DimArray([1.0 2; 3 4])
 @test sum( hcat(DimArray([1,3]), [2,4]) ./ b ) ≈ 4
 
 @test maximum( nest([DimArray([1,3]), [2,4]]) .- b ) ≈ 0
+
+aabb = vcat(hcat(a,a),b,b)
+@test size(aabb) == (8,2)
+@test DimArrays.dnames(aabb) == [:aa, :col]

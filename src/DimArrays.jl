@@ -167,7 +167,7 @@ function permutedims(a::DimArray, p::AbstractVector{Int})
     DimArray(permutedims(a.array, p), a.dnames[p], a.ifuncs[p], a.cname)
 end
 
-permutedims(a::DimArray, p::AbstractVector{<:SymbolOrString}) = permutedims(a, ensuredim.(p))
+permutedims(a::DimArray, p::AbstractVector{<:SymbolOrString}) = permutedims(a, ensuredim.((a,), p))
 
 permutedims(a::DimMatrix) = permutedims(a, [2,1])
 
