@@ -495,11 +495,11 @@ function Base.summary(a::DimArray)
     lab = haslabel(a) ? ", label = "*string(label(a))*"," : ""
     if typeof(a.array) <: Array
         ndims(a)==0 && pushln!(out, "DimArray{",eltype(a),"}$lab of zero dimensions:")
-        ndims(a)==1 && pushln!(out, "DimVector{",eltype(a),"}$lab with dimension:")
-        ndims(a)==2 && pushln!(out, "DimMatrix{",eltype(a),"}$lab with dimensions:")
-        ndims(a)>=3 && pushln!(out, "DimArray{",eltype(a),",",ndims(a),"}$lab with dimensions:")
+        ndims(a)==1 && pushln!(out, length(a),"-element DimVector{",eltype(a),"}$lab with dimension:")
+        ndims(a)==2 && pushln!(out, size(a,1),"×",size(a,2)," DimMatrix{",eltype(a),"}$lab with dimensions:")
+        ndims(a)>=3 && pushln!(out, join(string.(size(a)),"×"), " DimArray{",eltype(a),",",ndims(a),"}$lab with dimensions:")
     elseif typeof(a.array) <: RowVector
-        pushln!(out, "DimRowVector{",eltype(a),"} with dimensions:")
+        pushln!(out, length(a),"-element DimRowVector{",eltype(a),"} with dimensions:")
     else
         pushln!(out, summary(a.array), " wrapped in a DimArray with:")
     end
@@ -510,7 +510,10 @@ function Base.summary(a::DimArray)
         elseif d==2 push!(out, "   ⬗ ")
         else        push!(out, "   ◇ ")
         end
-        push!(out, rpad(string(dname(a,d)),4)," = ", stringfew(size(a,d)), " ")
+        push!(out, rpad(string(dname(a,d)),4))
+        if length(a)>0
+            push!(out, " = ", stringfew(size(a,d)), " ")
+        end
         if ifunc(a,d)!=identity
             push!(out, " ⟹   ", stringfew(size(a,d), ifunc(a,d)), " ")
         end
