@@ -18,6 +18,8 @@ b = DimArray([1.0 2; 3 4]; label=:c)
 
 @test string(b) == "DimArray([1.0 2.0; 3.0 4.0]; label = :c)"
 
+@test string(name!(slicedim(b, :col, 2), "one", "cont")) == "DimArray([2.0, 4.0], :one; label = :cont)"
+
 @test permutedims(b, (:col, :row))[1,2] ≈ 3
 
 @test sum(b, [:row,:col])[1] ≈ 10

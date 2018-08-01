@@ -1,6 +1,6 @@
 module DimArrays
 
-export DimArray, DimVector, DimMatrix, dictvector, nest
+export DimArray, DimVector, DimMatrix, dictvector, name!, nest
 
 const NameEl = Union{Symbol,Void}
 const FuncEl = Union{Function,Dict,Void}
@@ -108,9 +108,10 @@ function DimArray(x::TT, tup::Vararg; label = nothing) where TT<:AbstractArray{T
 end
 
 """
-    DimArray(x, [n1, n2, ...], [f1, f2, ...])
-    DimArray(x, (n1, n2, ...), (f1, f2, ...), label)
-Vectors of names/maps are splatted and digested as above.
+    DimArray(x, [n1, n2, ...], [f1, f2, ...], n9)
+    DimArray(x, [n1, n2, ...], [f1]; label=:n9)
+Vectors of names/maps are simply splatted, then digested as above.
+Content label `n9` here is kept separate, equivalent to keyword `label=:n9`.
 """
 DimArray(x::AbstractArray, list::Vector; kw...) = DimArray(x, list...; kw...);
 DimArray(x::AbstractArray, list::Vector, label::Symbol; kw...) = DimArray(x, list...; label=label, kw...);
@@ -128,12 +129,9 @@ DimMatrix(x::AbstractMatrix, rest...; kw...) = DimArray(x, rest...; kw...)
     DimArray(sym) = DimVector(Any[], sym)
 Empty `DimVector` into to which you can later `push!` things, optionally with a dimension name.
 """
-DimArray(T::Type) = DimArray(T[])
+DimArray(T::Type=Any, rest...) = DimArray(T[], rest...)
 @doc @doc(DimArray) ->
-DimVector(T::Type) = DimArray(T[])
-
-DimArray(T::Type, rest...) = DimArray(T[], rest...)
-DimVector(T::Type, rest...) = DimArray(T[], rest...)
+DimVector(T::Type=Any, rest...) = DimArray(T[], rest...)
 
 DimArray(s::SymbolOrString, rest...) = DimArray([], s, rest...)
 DimVector(s::SymbolOrString, rest...) = DimArray([], s, rest...)
@@ -143,22 +141,46 @@ DimArray(x::TT, dnames::Tuple, ifuncs::Tuple, cname::NameEl) where TT <: Abstrac
     DimArray{T,N,TT}(x, dnames, ifuncs, cname);
 
 """
-    dictvector(vec, [:first, :second, ...]) = DimVector(vec, Dict(1 => :first, 2 => :second, ...))
+    dictvector(vec, [:first, "second", ...]) = DimVector(vec, Dict(1 => :first, 2 => "second", ...))
     dictvector(vec, [:first, ...], :axis, :content)
 Convenient way to define a (short) `DimVector` whose index function is a dictionary labelling the entries.
-A name for the dimension / axis can be supplied too.
+A name for the dimension / axis, and a label for its content, can be supplied too.
 """
 function dictvector(vec::AbstractVector, isym::AbstractVector, rest...)
     ifun = Dict(i => s for (i,s) in enumerate(isym))
     DimVector(vec, ifun, rest...)
 end
+dictvector(vec::AbstractVector, s::SymbolOrString, isym::AbstractVector, rest...) =
+    dictvector(vec, isym, s, rest...)
 
 
 ### One-array operations ###
 ############################
 
+"""
+    name!(x, sym1, sym2)
+Name the dimensions of `x::DimArray` to be `sym1, sym2, ...`, with the `ndims(x)+1`-th one interpreted as content label.
+"""
+function name!(x::DimArray, ss::Vararg{SymbolOrString} ; label = nothing)
+    x.dnames = tuple([ d<=length(ss) ? ifelse(ss[d]=="", nothing, ss[d]) : x.dnames[d] for d=1:ndims(x) ]...)
+    if label!=nothing
+        x.cname = label
+        length(ss)>ndims(x) && warn("name! is ignoring name $(ss[ndims(x)+1])")
+    elseif length(ss)>ndims(x)
+        x.cname = ss[ndims(x)+1]
+    end
+    length(ss)>ndims(x)+1 && warn("name! is ignoring name $(ss[ndims(x)+2])")
+    x
+end
+
 import Base: push!, map, map!
 
+"""
+    push!(x, val, sym)
+For `x::DimVector` of `length(x)==n`, the result has `x[n+1]=val` with index label `n+1 => sym` added to the dictionary.
+Only works if x's index function is `nothing` or a `Dict`.
+See also `dictvector([val, val2, val3, ...], [sym, sym2, ...])` for directly creating such things.
+"""
 push!(a::DimVector, x...) = begin push!(a.array, x...); a end
 
 function push!(a::DimVector, x, s::SymbolOrString)
