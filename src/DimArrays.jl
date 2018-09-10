@@ -2,8 +2,8 @@ module DimArrays
 
 export DimArray, DimVector, DimMatrix, dictvector, name!, nest
 
-const NameEl = Union{Symbol,Void}
-const FuncEl = Union{Function,Dict,Void}
+const NameEl = Union{Symbol,Nothing}
+const FuncEl = Union{Function,Dict,Nothing}
 
 mutable struct DimArray{T,N,TT} <: AbstractArray{T,N}
     array::TT
@@ -12,10 +12,13 @@ mutable struct DimArray{T,N,TT} <: AbstractArray{T,N}
     cname::NameEl               ## content name, if any
 end
 
+using LinearAlgebra
+
 const DimVector{T} = DimArray{T,1}
 const DimMatrix{T} = DimArray{T,2}
 const DimVecOrMat{T} = Union{DimVector{T},DimMatrix{T}}
 const DimRowVector{T} = DimArray{T,2,<:RowVector{T}}
+const DimAdjoint{T} = DimArray{T,2,<:Adjoint{T}}
 
 
 ### Getters ###
@@ -121,7 +124,7 @@ DimArray(x::AbstractArray, a::Vector, b::Vector, label::Symbol; kw...) = DimArra
 
 DimVector(x::AbstractVector, rest...; kw...) = DimArray(x, rest...; kw...)
 DimMatrix(x::AbstractVector, rest...; kw...) = DimArray(reshape(x,:,1), rest...; kw...)
-@doc @doc(DimArray) ->
+@doc @doc(DimArray)
 DimMatrix(x::AbstractMatrix, rest...; kw...) = DimArray(x, rest...; kw...)
 
 """
@@ -130,7 +133,7 @@ DimMatrix(x::AbstractMatrix, rest...; kw...) = DimArray(x, rest...; kw...)
 Empty `DimVector` into to which you can later `push!` things, optionally with a dimension name.
 """
 DimArray(T::Type=Any, rest...) = DimArray(T[], rest...)
-@doc @doc(DimArray) ->
+@doc @doc(DimArray)
 DimVector(T::Type=Any, rest...) = DimArray(T[], rest...)
 
 DimArray(s::SymbolOrString, rest...) = DimArray([], s, rest...)
@@ -200,13 +203,14 @@ end
 map!(f::Function, a::DimVector) = begin map!(f, a.array); a end
 map(f::Function, a::DimVector) = DimArray(map(f, a.array), a.dnames, a.ifuncs, a.cname)
 
-import Base: transpose, ctranspose, permutedims
+import Base: transpose, adjoint, permutedims
 
-for op in (:transpose, :ctranspose)
+for op in (:transpose, :adjoint)
     @eval begin
         ($op)(a::DimMatrix) = DimArray( ($op)(a.array), rev2(a.dnames), rev2(a.ifuncs), a.cname)
         ($op)(a::DimVector) = DimArray( ($op)(a.array), (:transpose, a.dnames[1]), (nothing, a.ifuncs[1]), a.cname)
         ($op)(a::DimRowVector) = DimArray( ($op)(a.array), (a.dnames[2],), (a.ifuncs[2],), a.cname)
+        ($op)(a::DimAdjoint) = DimArray( ($op)(a.array), (a.dnames[2],), (a.ifuncs[2],), a.cname)
     end # @eval
 end
 
@@ -223,40 +227,39 @@ permutedims(a::DimArray, p::AbstractVector{<:SymbolOrString}) = permutedims(a, e
 
 permutedims(a::DimMatrix) = permutedims(a, [2,1])
 
-import Base: size, squeeze, slicedim
+import Base: size, dropdims, selectdim
 
 function size(a::DimArray, d::Union{Int,Symbol})
     d = ensuredim(a,d)
     size(a.array, d)
 end
 
-function squeeze(a::DimArray, d::Union{Int,Symbol}; verbose=false, zerodim=false)
-    d = ensuredim(a,d)
+function dropdims(a::DimArray; dims::Union{Int,Symbol}, verbose=false, zerodim=false)
+    d = ensuredim(a,dims)
     d==1 && ndims(a)==1 && !zerodim && return a[1]
-    out = DimArray(Base.squeeze(a.array, d), dropd(a.dnames,d), dropd(a.ifuncs,d), a.cname)
+    out = DimArray(Base.dropdims(a.array; dims=d), dropd(a.dnames,d), dropd(a.ifuncs,d), a.cname)
     verbose && info("""squeezed along :$(dname(a,d)), leaving directions $(dnames(out)) size $(size(out))""")
     return out
 end
 
-function squeeze(a::DimArray, dims::AbstractVector; kw...)
-    length(dims)==1 && return squeeze(a, dims[1]; kw...)
-    # dims = sort(dims)
-    return squeeze(squeeze(a, dims[end]; kw...), dims[1:end-1]; kw...)
+function dropdims(a::DimArray; dims::AbstractVector, kw...)
+    length(dims)==1 && return dropdims(a; dims=dims[1], kw...)
+    dropdims(dropdims(a; dims=dims[end], kw...); dims=dims[1:end-1], kw...)
 end
 
-function squeeze(a::DimArray; kw...)
+function dropdims(a::DimArray; kw...)
     which = [d for d=1:ndims(a) if size(a,d)==1]
-    squeeze(a, which; kw...)
+    dropdims(a; dims=which, kw...)
 end
 
-function slicedim(a::DimArray, d::Union{Symbol, Int}, i::Int)
+function selectdim(a::DimArray, d::Union{Symbol, Int}, i::Int)
     d = ensuredim(a,d)
-    DimArray(slicedim(a.array,d,i), dropd(a.dnames,d), dropd(a.ifuncs,d), a.cname)
+    DimArray(selectdim(a.array,d,i), dropd(a.dnames,d), dropd(a.ifuncs,d), a.cname)
 end
 
 ensuredim(a::DimArray, d::Int) = d
 function ensuredim(a::DimArray{T,N}, s::Symbol) where {T,N}
-    d = findfirst(dnames(a), s)
+    d = something(findfirst(isequal(s), dnames(a)))
     1<=d<=N || error("""can't use direction :$s; valid options are $(dnames(a))""")
     return d
 end
@@ -264,34 +267,34 @@ end
 dropd(vec::Vector, d) = d>length(vec) ? vec : append!(vec[1:d-1], vec[d+1:end])
 dropd(tup::Tuple, d) = d>length(tup) ? tup : (tup[1:d-1]..., tup[d+1:end]...)
 
-import Base: sum, mean, std, maximum, minimum
+import Base: sum, maximum, minimum
+import Statistics: mean, std
 
 for op in (:sum, :mean, :std, :maximum, :minimum )
     @eval begin
 
-        function ($op)(a::DimArray, d::Int; squeeze=false, verbose=false, kw...)
+        function ($op)(a::DimArray; dims::Int, squeeze=false, verbose=false, kw...)
 
-            data = ($op)(a.array, d; kw...)
+            data = ($op)(a.array; dims=dims, kw...)
             if squeeze
-                out = DimArray(Base.squeeze(data, d), dropd(a.dnames,d), dropd(a.ifuncs,d), a.cname)
+                out = DimArray(Base.dropdims(data; dims=dims), dropd(a.dnames,dims), dropd(a.ifuncs,dims), a.cname)
             else
                 out = DimArray(data, a.dnames, a.ifuncs, a.cname)
             end
 
-            verbose && info("""$(($op))-ed along :$(dname(a,d)), leaving directions $(dnames(out)) size $(size(out))""")
+            verbose && info("""$(($op))-ed along :$(dname(a,dims)), leaving directions $(dnames(out)) size $(size(out))""")
             return out
         end
 
-        function ($op)(a::DimArray, s::Symbol; squeeze=true, verbose=false, kw...) ## different defaults!
-            d = ensuredim(a,s)
-            return ($op)(a, d; squeeze=squeeze, verbose=verbose, kw...)
+        function ($op)(a::DimArray; dims::Symbol, squeeze=true, verbose=false, kw...) ## different defaults!
+            d = ensuredim(a,dims)
+            return ($op)(a; dims=d, squeeze=squeeze, verbose=verbose, kw...)
         end
 
-        function ($op)(a::DimArray, dims::AbstractVector; kw...)
-            length(dims)==1 && return ($op)(a, dims[1]; kw...)
-            # dims = sort(dims)
-            b = ($op)(a, dims[end]; kw...)
-            return ($op)(b, dims[1:end-1]; kw...)
+        function ($op)(a::DimArray; dims::AbstractVector, kw...)
+            length(dims)==1 && return ($op)(a; dims=dims[1], kw...)
+            b = ($op)(a; dims=dims[end], kw...)
+            return ($op)(b; dims=dims[1:end-1], kw...)
         end
 
     end # @eval
@@ -307,12 +310,12 @@ import Base: +, -, *, /, \
 
 for op in (:+, :-, :*)
     @eval begin
-        ($op){T1<:Number,T2<:Number}(a::DimArray{T1}, s::T2) = DimArray(($op)(a.array, s), a.dnames, a.ifuncs, a.cname)
-        ($op){T1<:Number,T2<:Number}(s::T1, a::DimArray{T2}) = DimArray(($op)(s, a.array), a.dnames, a.ifuncs, a.cname)
+        ($op)(a::DimArray{T1}, s::T2) where {T1<:Number,T2<:Number} = DimArray(($op)(a.array, s), a.dnames, a.ifuncs, a.cname)
+        ($op)(s::T1, a::DimArray{T2}) where {T1<:Number,T2<:Number} = DimArray(($op)(s, a.array), a.dnames, a.ifuncs, a.cname)
     end
 end
-/{T1<:Number,T2<:Number}(a::DimArray{T1}, s::T2) = DimArray(a.array / s, a.dnames, a.ifuncs, a.cname)
-\{T1<:Number,T2<:Number}(s::T1, a::DimArray{T2}) = DimArray(s \ a.array, a.dnames, a.ifuncs, a.cname)
+/(a::DimArray{T1}, s::T2) where {T1<:Number,T2<:Number} = DimArray(a.array / s, a.dnames, a.ifuncs, a.cname)
+\(s::T1, a::DimArray{T2}) where {T1<:Number,T2<:Number} = DimArray(s \ a.array, a.dnames, a.ifuncs, a.cname)
 
 
 ### Generators ###
@@ -325,29 +328,29 @@ Base.collect(itr::Base.Generator{<:DimArray}) =
 ### Broadcasting ###
 ####################
 
-Base.Broadcast._containertype(::Type{<:DimArray}) = DimArray
-
-Base.Broadcast.promote_containertype(::Type{DimArray}, _) = DimArray
-Base.Broadcast.promote_containertype(_, ::Type{DimArray}) = DimArray
-Base.Broadcast.promote_containertype(::Type{DimArray}, ::Type{Array}) = DimArray
-Base.Broadcast.promote_containertype(::Type{Array}, ::Type{DimArray}) = DimArray
-Base.Broadcast.promote_containertype(::Type{DimArray}, ::Type{DimArray}) = DimArray
-
-array(a::DimArray) = a.array
-array(x) = x
-
-function Base.Broadcast.broadcast_c(fun, t::Type{DimArray}, list...)
-    res = broadcast(fun, array.(list)...)
-    T = eltype(res); N = ndims(res); TT = typeof(res)
-    ## is there a DimArray of the final shape, and not made by v'?
-    for a in list
-        if isa(a, DimArray) && size(a) == size(res) && findfirst(dnames(a), :transpose)==0
-        return DimArray{T,N,TT}(res, a.dnames, a.ifuncs, a.cname) end
-    end
-    ## if not, you have to work harder:
-    rest = reconcile(list, N)
-    DimArray{T,N,TT}(res, rest...)
-end
+# Base.Broadcast._containertype(::Type{<:DimArray}) = DimArray
+#
+# Base.Broadcast.promote_containertype(::Type{DimArray}, _) = DimArray
+# Base.Broadcast.promote_containertype(_, ::Type{DimArray}) = DimArray
+# Base.Broadcast.promote_containertype(::Type{DimArray}, ::Type{Array}) = DimArray
+# Base.Broadcast.promote_containertype(::Type{Array}, ::Type{DimArray}) = DimArray
+# Base.Broadcast.promote_containertype(::Type{DimArray}, ::Type{DimArray}) = DimArray
+#
+# array(a::DimArray) = a.array
+# array(x) = x
+#
+# function Base.Broadcast.broadcast_c(fun, t::Type{DimArray}, list...)
+#     res = broadcast(fun, array.(list)...)
+#     T = eltype(res); N = ndims(res); TT = typeof(res)
+#     ## is there a DimArray of the final shape, and not made by v'?
+#     for a in list
+#         if isa(a, DimArray) && size(a) == size(res) && findfirst(dnames(a), :transpose)==0
+#         return DimArray{T,N,TT}(res, a.dnames, a.ifuncs, a.cname) end
+#     end
+#     ## if not, you have to work harder:
+#     rest = reconcile(list, N)
+#     DimArray{T,N,TT}(res, rest...)
+# end
 
 function reconcile(list, N)
     names = Vector{NameEl}(repeated(nothing, N) |> collect)
@@ -368,7 +371,7 @@ function reconcile(list, N)
         end
     end
     for d=2:N
-        if names[d] != nothing && findfirst(names[1:d-1], names[d])>0 ## if symbol already used, add a prime...
+        if names[d] != nothing && findfirst(isequal(names[d]), names[1:d-1])!=nothing ## if symbol already used, add a prime...
             for dd=N:-1:d ## ... to all later occurances too
                 if names[dd]==names[d]
                     names[dd] = Symbol(names[d], "′")
@@ -388,14 +391,14 @@ import Base: append!, hcat, vcat, cat
 for op in (:+, :-, :append!)
     @eval begin
         ## adding a boring array
-        ($op){T1<:Number,T2<:Number,N}(a::DimArray{T1,N}, b::AbstractArray{T2,N}) =
+        ($op)(a::DimArray{T1,N}, b::AbstractArray{T2,N}) where {T1<:Number,T2<:Number,N} =
             DimArray(($op)(a.array, b), a.dnames, a.ifuncs, a.cname)
 
-        ($op){T1<:Number,T2<:Number,N}(b::AbstractArray{T1,N}, a::DimArray{T2,N}) =
+        ($op)(b::AbstractArray{T1,N}, a::DimArray{T2,N}) where {T1<:Number,T2<:Number,N} =
             DimArray(($op)(b, a.array), a.dnames, a.ifuncs, a.cname)
 
         ## adding two DimArrays
-        ($op){T1<:Number, T2<:Number}(a::DimArray{T1}, b::DimArray{T2}) =
+        ($op)(a::DimArray{T1}, b::DimArray{T2}) where {T1<:Number, T2<:Number} =
             DimArray(($op)(a.array, b.array), reconcile((a,b),ndims(a))...)
     end # @eval
 end
@@ -489,7 +492,7 @@ function nest(vec::AbstractVector) ## Allow Vector{Any} but assume contents is a
 end
 
 ## that's based on Flux.batch
-batchindex(xs, i) = (reverse(Base.tail(reverse(indices(xs))))..., i)
+batchindex(xs, i) = (reverse(Base.tail(reverse(axes(xs))))..., i)
 
 function nest(arr::AbstractArray{D}) where {D}
     one = [nest(slicedim(arr, ndims(arr), c)) for c=1:size(arr,ndims(arr))]
@@ -510,40 +513,38 @@ function Base.show(io::IO, a::DimArray)
     print(io, ")")
 end
 
-pushln!(v::Vector,  more...) = push!(v, more..., '\n')
-
-function Base.summary(a::DimArray)
-    out = []
+function Base.summary(io::IO, a::DimArray)
     lab = haslabel(a) ? ", label = "*string(label(a))*"," : ""
     if typeof(a.array) <: Array
-        ndims(a)==0 && pushln!(out, "DimArray{",eltype(a),"}$lab of zero dimensions:")
-        ndims(a)==1 && pushln!(out, length(a),"-element DimVector{",eltype(a),"}$lab with dimension:")
-        ndims(a)==2 && pushln!(out, size(a,1),"×",size(a,2)," DimMatrix{",eltype(a),"}$lab with dimensions:")
-        ndims(a)>=3 && pushln!(out, join(string.(size(a)),"×"), " DimArray{",eltype(a),",",ndims(a),"}$lab with dimensions:")
+        ndims(a)==0 && println(io, "DimArray{",eltype(a),"}$lab of zero dimensions:")
+        ndims(a)==1 && println(io, length(a),"-element DimVector{",eltype(a),"}$lab with dimension:")
+        ndims(a)==2 && println(io, size(a,1),"×",size(a,2)," DimMatrix{",eltype(a),"}$lab with dimensions:")
+        ndims(a)>=3 && println(io, join(string.(size(a)),"×"), " DimArray{",eltype(a),",",ndims(a),"}$lab with dimensions:")
     elseif typeof(a.array) <: RowVector
-        pushln!(out, length(a),"-element DimRowVector{",eltype(a),"} with dimensions:")
+        println(io, length(a),"-element DimRowVector{",eltype(a),"} with dimensions:")
+    elseif typeof(a.array) <: Adjoint
+        println(io, length(a),"-element DimAdjoint{",eltype(a),"} with dimensions:")
     else
-        pushln!(out, summary(a.array), " wrapped in a DimArray with:")
+        println(io, summary(a.array), " wrapped in a DimArray with:")
     end
     for d=1:ndims(a)
         if a.dnames[d]==nothing #|| a.dnames[d]==:transpose
-                    push!(out, "   ⭒ ") ## different symbol for default names
-        elseif d==1 push!(out, "   ⬙ ") ## ⇁⇂
-        elseif d==2 push!(out, "   ⬗ ")
-        else        push!(out, "   ◇ ")
+                    print(io, "   ⭒ ") ## different symbol for default names
+        elseif d==1 print(io, "   ⬙ ") ## ⇁⇂
+        elseif d==2 print(io, "   ⬗ ")
+        else        print(io, "   ◇ ")
         end
-        push!(out, rpad(string(dname(a,d)),4))
+        print(io, rpad(string(dname(a,d)),4))
         if length(a)>0
-            push!(out, " = ", stringfew(size(a,d)), " ")
+            print(io, " = ", stringfew(size(a,d)), " ")
         end
         if ifunc(a,d)!=identity
-            push!(out, " ⟹   ", stringfew(size(a,d), ifunc(a,d)), " ")
+            print(io, " ⟹   ", stringfew(size(a,d), ifunc(a,d)), " ")
         end
         if d<ndims(a)
-            pushln!(out, "")
+            println(io, "")
         end
     end
-    join(out)
 end
 
 function stringfew(n, f=identity)
@@ -596,28 +597,28 @@ end
 ### Conversions ###
 ###################
 
-using Requires
-
-@require NamedArrays begin
-    using NamedArrays: NamedArray
-
-    axestuple(a::DimArray) = Tuple([f.(collect(1:size(a,d))) for (d,f) in enumerate(ifuncs(a))])
-    nametuple(a::DimArray) = Tuple(dnames(a))
-    Base.convert(::Type{NamedArray}, a::DimArray) = NamedArray(a.array, axestuple(a), nametuple(a))
-    NamedArray(a::DimArray) = convert(NamedArray, a)
-
-    ## TODO reverse conversion?
-end
-
-@require AxisArrays begin
-    using AxisArrays: AxisArray, Axis
-
-    axislist(a::DimArray) = [ Axis{dname(a,d)}( ifunc(a,d).(collect(1:size(a,d)) ) ) for d=1:ndims(a) ]
-    Base.convert(::Type{AxisArray}, a::DimArray) = AxisArray(a.array, axislist(a)...)
-    AxisArray(a::DimArray) = convert(AxisArray, a)
-
-    ## TODO reverse conversion?
-end
+# using Requires
+#
+# @require NamedArrays begin
+#     using NamedArrays: NamedArray
+#
+#     axestuple(a::DimArray) = Tuple([f.(collect(1:size(a,d))) for (d,f) in enumerate(ifuncs(a))])
+#     nametuple(a::DimArray) = Tuple(dnames(a))
+#     Base.convert(::Type{NamedArray}, a::DimArray) = NamedArray(a.array, axestuple(a), nametuple(a))
+#     NamedArray(a::DimArray) = convert(NamedArray, a)
+#
+#     ## TODO reverse conversion?
+# end
+#
+# @require AxisArrays begin
+#     using AxisArrays: AxisArray, Axis
+#
+#     axislist(a::DimArray) = [ Axis{dname(a,d)}( ifunc(a,d).(collect(1:size(a,d)) ) ) for d=1:ndims(a) ]
+#     Base.convert(::Type{AxisArray}, a::DimArray) = AxisArray(a.array, axislist(a)...)
+#     AxisArray(a::DimArray) = convert(AxisArray, a)
+#
+#     ## TODO reverse conversion?
+# end
 
 
 ### End ###

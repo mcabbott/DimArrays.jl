@@ -1,11 +1,8 @@
 # DimArrays
 
-[![Build Status](https://travis-ci.org/mcabbott/DimArrays.jl.svg?branch=master)](https://travis-ci.org/mcabbott/DimArrays.jl)
+I'm trying to upgrade this to Julia 0.7. But it has some errors still.
 
-[![Coverage Status](https://coveralls.io/repos/mcabbott/DimArrays.jl/badge.svg?branch=master&service=github)](https://coveralls.io/github/mcabbott/DimArrays.jl?branch=master)
-
-[![codecov.io](http://codecov.io/github/mcabbott/DimArrays.jl/coverage.svg?branch=master)](http://codecov.io/github/mcabbott/DimArrays.jl?branch=master)
-
+## v1 Explanation
 
 Sometimes I collect data as a vector of matrices, or a vector of those, and sometimes I smash that into a 4-tensor.
 Then I make lots of mistakes about which dimensions are which.
@@ -90,6 +87,13 @@ ToDo:
 
 Michael Abbott,
 January 2018, mostly.
+
+
+[![Build Status](https://travis-ci.org/mcabbott/DimArrays.jl.svg?branch=master)](https://travis-ci.org/mcabbott/DimArrays.jl)
+
+[![Coverage Status](https://coveralls.io/repos/mcabbott/DimArrays.jl/badge.svg?branch=master&service=github)](https://coveralls.io/github/mcabbott/DimArrays.jl?branch=master)
+
+[![codecov.io](http://codecov.io/github/mcabbott/DimArrays.jl/coverage.svg?branch=master)](http://codecov.io/github/mcabbott/DimArrays.jl?branch=master)
 
 <!--
 Note to self:
