@@ -216,6 +216,8 @@ end
 
 rev2(tup::Tuple) = (tup[2], tup[1])
 
+const TupOrVec = Union{Tuple, AbstractVector}
+
 permutedims(a::DimMatrix, tup::Tuple) = permutedims(a, [tup...])
 
 function permutedims(a::DimArray, p::AbstractVector{Int})
@@ -234,7 +236,7 @@ function size(a::DimArray, d::Union{Int,Symbol})
     size(a.array, d)
 end
 
-function dropdims(a::DimArray; dims::Union{Int,Symbol}, verbose=false, zerodim=false)
+function dropdims(a::DimArray; dims::Union{Int,Symbol,TupOrVec}, verbose=false, zerodim=false)
     d = ensuredim(a,dims)
     d==1 && ndims(a)==1 && !zerodim && return a[1]
     out = DimArray(Base.dropdims(a.array; dims=d), dropd(a.dnames,d), dropd(a.ifuncs,d), a.cname)
@@ -242,15 +244,16 @@ function dropdims(a::DimArray; dims::Union{Int,Symbol}, verbose=false, zerodim=f
     return out
 end
 
-function dropdims(a::DimArray; dims::AbstractVector, kw...)
-    length(dims)==1 && return dropdims(a; dims=dims[1], kw...)
-    dropdims(dropdims(a; dims=dims[end], kw...); dims=dims[1:end-1], kw...)
-end
-
-function dropdims(a::DimArray; kw...)
-    which = [d for d=1:ndims(a) if size(a,d)==1]
-    dropdims(a; dims=which, kw...)
-end
+## Can't dispatch on keyword... 
+# function dropdims(a::DimArray; dims::AbstractVector, kw...)
+#     length(dims)==1 && return dropdims(a; dims=dims[1], kw...)
+#     dropdims(dropdims(a; dims=dims[end], kw...); dims=dims[1:end-1], kw...)
+# end
+#
+# function dropdims(a::DimArray; kw...)
+#     which = [d for d=1:ndims(a) if size(a,d)==1]
+#     dropdims(a; dims=which, kw...)
+# end
 
 function selectdim(a::DimArray, d::Union{Symbol, Int}, i::Int)
     d = ensuredim(a,d)
@@ -263,9 +266,11 @@ function ensuredim(a::DimArray{T,N}, s::Symbol) where {T,N}
     1<=d<=N || error("""can't use direction :$s; valid options are $(dnames(a))""")
     return d
 end
+ensuredim(a::DimArray, dims::TupOrVec) = ensuredim.((a,), dims)
 
-dropd(vec::Vector, d) = d>length(vec) ? vec : append!(vec[1:d-1], vec[d+1:end])
-dropd(tup::Tuple, d) = d>length(tup) ? tup : (tup[1:d-1]..., tup[d+1:end]...)
+dropd(vec::Vector, d::Int) = d>length(vec) ? vec : append!(vec[1:d-1], vec[d+1:end])
+dropd(tup::Tuple, d::Int) = d>length(tup) ? tup : (tup[1:d-1]..., tup[d+1:end]...)
+dropd(z, dims::TupOrVec) = length(dims)==1 ? dropd(z, dims[1]) : dropd(dropd(z, dims[end]), dims[1:end-1])
 
 import Base: sum, maximum, minimum
 import Statistics: mean, std
@@ -273,11 +278,13 @@ import Statistics: mean, std
 for op in (:sum, :mean, :std, :maximum, :minimum )
     @eval begin
 
-        function ($op)(a::DimArray; dims::Int, squeeze=false, verbose=false, kw...)
+        function ($op)(a::DimArray; dims::Union{Int,Symbol,TupOrVec}, squeeze=isa(dims,Symbol), verbose=false, kw...)
+            
+            d = ensuredim(a, dims)
 
-            data = ($op)(a.array; dims=dims, kw...)
+            data = ($op)(a.array; dims=d, kw...)
             if squeeze
-                out = DimArray(Base.dropdims(data; dims=dims), dropd(a.dnames,dims), dropd(a.ifuncs,dims), a.cname)
+                out = DimArray(Base.dropdims(data; dims=d), dropd(a.dnames,d), dropd(a.ifuncs,d), a.cname)
             else
                 out = DimArray(data, a.dnames, a.ifuncs, a.cname)
             end
@@ -286,16 +293,17 @@ for op in (:sum, :mean, :std, :maximum, :minimum )
             return out
         end
 
-        function ($op)(a::DimArray; dims::Symbol, squeeze=true, verbose=false, kw...) ## different defaults!
-            d = ensuredim(a,dims)
-            return ($op)(a; dims=d, squeeze=squeeze, verbose=verbose, kw...)
-        end
-
-        function ($op)(a::DimArray; dims::AbstractVector, kw...)
-            length(dims)==1 && return ($op)(a; dims=dims[1], kw...)
-            b = ($op)(a; dims=dims[end], kw...)
-            return ($op)(b; dims=dims[1:end-1], kw...)
-        end
+        ## Can't dispatch on keyword. 
+        # function ($op)(a::DimArray; dims::Symbol, squeeze=true, verbose=false, kw...) ## different defaults!
+        #     d = ensuredim(a,dims)
+        #     return ($op)(a; dims=d, squeeze=squeeze, verbose=verbose, kw...)
+        # end
+        #
+        # function ($op)(a::DimArray; dims::AbstractVector, kw...)
+        #     length(dims)==1 && return ($op)(a; dims=dims[1], kw...)
+        #     b = ($op)(a; dims=dims[end], kw...)
+        #     return ($op)(b; dims=dims[1:end-1], kw...)
+        # end
 
     end # @eval
 end
