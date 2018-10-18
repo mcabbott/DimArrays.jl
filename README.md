@@ -1,9 +1,5 @@
 # DimArrays
 
-I'm trying to upgrade this to Julia 0.7. But it has some errors still.
-
-## v1 Explanation
-
 Sometimes I collect data as a vector of matrices, or a vector of those, and sometimes I smash that into a 4-tensor.
 Then I make lots of mistakes about which dimensions are which.
 So because I had more important things to do, I thought I'd write a simple package to remember their names for me.
@@ -82,7 +78,7 @@ For other views on vectors of arrays etc, see  [RecursiveArrayTools](https://git
 and [JuliennedArrays](https://github.com/bramtayl/JuliennedArrays.jl).
 
 ToDo:
-* Make things like `x[:, 1:10:end]` update the functions.
+* Maybe make things like `x[:, 1:10:end]` update the functions.
 * Figure out Julia 0.7's new broadcasting machinery.
 
 Michael Abbott,
@@ -91,9 +87,10 @@ January 2018, mostly.
 
 [![Build Status](https://travis-ci.org/mcabbott/DimArrays.jl.svg?branch=master)](https://travis-ci.org/mcabbott/DimArrays.jl)
 
+<!--
 [![Coverage Status](https://coveralls.io/repos/mcabbott/DimArrays.jl/badge.svg?branch=master&service=github)](https://coveralls.io/github/mcabbott/DimArrays.jl?branch=master)
-
 [![codecov.io](http://codecov.io/github/mcabbott/DimArrays.jl/coverage.svg?branch=master)](http://codecov.io/github/mcabbott/DimArrays.jl?branch=master)
+--> 
 
 <!--
 Note to self:
