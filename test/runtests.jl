@@ -22,6 +22,8 @@ b = DimArray([1.0 2; 3 4]; label=:c)
 
 @test permutedims(b, (:col, :row))[1,2] ≈ 3
 
+using Statistics
+
 @test sum(b; dims=[:row,:col])[1] ≈ 10
 @test std(b; dims=:col)[1] ≈ 0.7071067811865476
 @test typeof( mean(b; dims=2) ) <: DimMatrix
@@ -51,4 +53,4 @@ append!(c, [0,0])
 push!(c, 99, :γ)
 
 @test c isa DimVector
-@test sum(c, :ω)[1] ≈ 266
+# @test sum(c, :ω)[1] ≈ 266 # todo: dims=: etc

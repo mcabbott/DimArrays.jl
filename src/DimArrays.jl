@@ -17,7 +17,7 @@ using LinearAlgebra
 const DimVector{T} = DimArray{T,1}
 const DimMatrix{T} = DimArray{T,2}
 const DimVecOrMat{T} = Union{DimVector{T},DimMatrix{T}}
-const DimRowVector{T} = DimArray{T,2,<:RowVector{T}}
+# const DimRowVector{T} = DimArray{T,2,<:RowVector{T}}
 const DimAdjoint{T} = DimArray{T,2,<:Adjoint{T}}
 
 
@@ -52,7 +52,7 @@ haslabel(a::DimArray) = a.cname != nothing
 
 using Lazy: @forward
 @forward DimArray.array  Base.size, Base.length, Base.ndims, Base.getindex, Base.setindex!, Base.append!
-@forward DimArray.array  Base.first, Base.start, Base.next, Base.done
+@forward DimArray.array  Base.first, Base.iterate, Base.lastindex
 
 
 ### Constructors ###
@@ -84,7 +84,7 @@ function DimArray(x::TT, tup::Vararg; label = nothing) where TT<:AbstractArray{T
             if f<N
                 funcs[f += 1] = ensurefuncordict(z)
             else
-                warn("DimArray is ignoring function $z")
+                @warn "DimArray is ignoring function $z"
             end
         elseif isa(z, SymbolOrString)
             if n<N
@@ -97,12 +97,12 @@ function DimArray(x::TT, tup::Vararg; label = nothing) where TT<:AbstractArray{T
                 label=Symbol(z)
                 n += 1
             elseif z!=""
-                warn("DimArray is ignoring name $z")
+                @warn "DimArray is ignoring name $z"
             end
         elseif isa(z, Vector)
-            warn("DimArray is ignoring vector $z, this shouldn't happen!")
+            @warn "DimArray is ignoring vector $z, this shouldn't happen!"
         elseif isa(z, Tuple)
-            warn("DimArray is ignoring tuple $z, this really shouldn't happen!")
+            @warn "DimArray is ignoring tuple $z, this really shouldn't happen!"
         elseif z==nothing
             ## ignore, no problem!
         end
@@ -165,14 +165,14 @@ dictvector(vec::AbstractVector, s::SymbolOrString, isym::AbstractVector, rest...
 Name the dimensions of `x::DimArray` to be `sym1, sym2, ...`, with the `ndims(x)+1`-th one interpreted as content label.
 """
 function name!(x::DimArray, ss::Vararg{SymbolOrString} ; label = nothing)
-    x.dnames = tuple([ d<=length(ss) ? ifelse(ss[d]=="", nothing, ss[d]) : x.dnames[d] for d=1:ndims(x) ]...)
+    x.dnames = ntuple(d -> d<=length(ss) ? ifelse(ss[d]=="", nothing, Symbol(ss[d])) : x.dnames[d] , ndims(x))
     if label!=nothing
         x.cname = label
-        length(ss)>ndims(x) && warn("name! is ignoring name $(ss[ndims(x)+1])")
+        length(ss)>ndims(x) && @warn "name! is ignoring name $(ss[ndims(x)+1])"
     elseif length(ss)>ndims(x)
-        x.cname = ss[ndims(x)+1]
+        x.cname = Symbol(ss[ndims(x)+1])
     end
-    length(ss)>ndims(x)+1 && warn("name! is ignoring name $(ss[ndims(x)+2])")
+    length(ss)>ndims(x)+1 && @warn "name! is ignoring name $(ss[ndims(x)+2])"
     x
 end
 
@@ -195,7 +195,7 @@ function push!(a::DimVector, x, s::SymbolOrString)
         a.ifuncs[1][length(a)] = string(s)
     end
     if a.ifuncs[1] isa Function
-        warn("push! can't append index label $s as dimension index is not a Dict", once=true)
+        @warn "push! can't append index label $s as dimension index is not a Dict" # once=true
     end
     a
 end
@@ -209,7 +209,7 @@ for op in (:transpose, :adjoint)
     @eval begin
         ($op)(a::DimMatrix) = DimArray( ($op)(a.array), rev2(a.dnames), rev2(a.ifuncs), a.cname)
         ($op)(a::DimVector) = DimArray( ($op)(a.array), (:transpose, a.dnames[1]), (nothing, a.ifuncs[1]), a.cname)
-        ($op)(a::DimRowVector) = DimArray( ($op)(a.array), (a.dnames[2],), (a.ifuncs[2],), a.cname)
+        # ($op)(a::DimRowVector) = DimArray( ($op)(a.array), (a.dnames[2],), (a.ifuncs[2],), a.cname)
         ($op)(a::DimAdjoint) = DimArray( ($op)(a.array), (a.dnames[2],), (a.ifuncs[2],), a.cname)
     end # @eval
 end
@@ -425,7 +425,7 @@ import Base: *, kron
 
 function *(a::DimArray, b::DimArray)
     a.dnames[end]!=b.dnames[1] && a.dnames[end]!=nothing && b.dnames[1]!=nothing &&
-        warn("multiplying along dimensions with mismatched names", once=true)
+        @warn "multiplying along dimensions with mismatched names" # once=true
     names = (a.dnames[1:end-1]..., b.dnames[2:end]...)
     funcs = (a.ifuncs[1:end-1]..., b.ifuncs[2:end]...)
     DimArray(a.array * b.array, names, funcs, a.cname )
@@ -528,8 +528,8 @@ function Base.summary(io::IO, a::DimArray)
         ndims(a)==1 && println(io, length(a),"-element DimVector{",eltype(a),"}$lab with dimension:")
         ndims(a)==2 && println(io, size(a,1),"×",size(a,2)," DimMatrix{",eltype(a),"}$lab with dimensions:")
         ndims(a)>=3 && println(io, join(string.(size(a)),"×"), " DimArray{",eltype(a),",",ndims(a),"}$lab with dimensions:")
-    elseif typeof(a.array) <: RowVector
-        println(io, length(a),"-element DimRowVector{",eltype(a),"} with dimensions:")
+    # elseif typeof(a.array) <: RowVector
+    #     println(io, length(a),"-element DimRowVector{",eltype(a),"} with dimensions:")
     elseif typeof(a.array) <: Adjoint
         println(io, length(a),"-element DimAdjoint{",eltype(a),"} with dimensions:")
     else
