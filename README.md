@@ -1,7 +1,7 @@
 # DimArrays.jl
 
 This packages provides Julia arrays with named dimensions. 
-Like the built-in `Array` type these are mutable objects, 
+Like the built-in Array type these are mutable objects, 
 unlike [NamedArrays](https://github.com/davidavdav/NamedArrays.jl) and [AxisArrays](https://github.com/JuliaArrays/AxisArrays.jl) which are immutable. 
 
 The idea was to have a convenient way to gather results of calculations in a script or notebook, rather than for anything high-performance. 
@@ -86,9 +86,10 @@ January 2018, mostly (as I had a grant to write).
 
 [![Build Status](https://travis-ci.org/mcabbott/DimArrays.jl.svg?branch=master)](https://travis-ci.org/mcabbott/DimArrays.jl)
 
+<!--
 [![Coverage Status](https://coveralls.io/repos/mcabbott/DimArrays.jl/badge.svg?branch=master&service=github)](https://coveralls.io/github/mcabbott/DimArrays.jl?branch=master)
-
 [![codecov.io](http://codecov.io/github/mcabbott/DimArrays.jl/coverage.svg?branch=master)](http://codecov.io/github/mcabbott/DimArrays.jl?branch=master)
+--> 
 
 <!--
 Note to self:
