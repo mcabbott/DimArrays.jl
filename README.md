@@ -1,88 +1,87 @@
-# DimArrays
+# DimArrays.jl
 
-Sometimes I collect data as a vector of matrices, or a vector of those, and sometimes I smash that into a 4-tensor.
-Then I make lots of mistakes about which dimensions are which.
-So because I had more important things to do, I thought I'd write a simple package to remember their names for me.
+This packages provides Julia arrays with named dimensions. 
+Like the built-in Array type these are mutable objects, 
+unlike [NamedArrays](https://github.com/davidavdav/NamedArrays.jl) and [AxisArrays](https://github.com/JuliaArrays/AxisArrays.jl) which are immutable. 
 
+The idea was to have a convenient way to gather results of calculations in a script or notebook, rather than for anything high-performance. 
+For example, here I have a matrix of results at each iteration, and `nest` these into a 3-tensor, whose axis order I need not remember:
 ```julia
 using DimArrays
 
 list = [];
 for i=1:33
     slowcalc = sqrt(i) .* randn(3,13) .+ i
-    push!(list, DimArray(slowcalc, :a, :b, :c ))  ## add labels for 1st and 2nd dimensions  
+    push!(list, DimArray(slowcalc, :a, :b, :c ))  # add labels for 1st and 2nd dimensions  
 end
 
-list3 = nest(list, :iter)  ## now i is the 3rd index, and named "iter"
+list3 = nest(list, :iter)   # now i is the 3rd index, and named "iter"
 
-mean(list3, :iter)  ## equivalent to squeeze(mean(list3,3),3)
+using Statistics
+
+mean(list3, dims=:iter)     # equivalent to dropdims(mean(list3, dims=3), dims=3)
 ```
-
-And for quick-and-dirty plots, I want the axes & series labelled
-so that I know which is which, and can quickly decide if I need a transpose:
+For quick plots, dimension names are used for axes and series: 
 ```julia
 using Plots
 
-plot(slicedim(list3, :b, 1)' , legend=:bottomright)
+plot(selectdim(list3, :b, 1)' , legend=:bottomright)
 ```
-Here `slicedim(list3, :b, 1) == list3[:,1,:]` in contents, but retains the labels.
+Here `selectdim(list3, :b, 1) == list3[:,1,:]` in contents, but retains the labels.
 
-Besides each dimension's name (a Symbol, strings will be converted) it can also store a function,
-which is used in plotting to scale the axes etc. (But only the output, `getindex` uses original integer indices).
+Besides each dimension's name (which is a Symbol, strings will be converted) it can also store a function, which is used in plotting to scale the axes etc. 
+(But only the output, `getindex` uses original integer indices).
 You can pass a number by which to scale the index, or a dictionary, instead of a function.
-For example, this plots data sampled every 4 iterations correctly over the above:
+
+For example, this plots data saved every 4 iterations correctly over the above example:
 ```julia
 saveevery = 4
-list4 = DimArray([], :iter, saveevery);  ## equivalent to function  i->4i
+list4 = DimArray([], :iter, saveevery);     # equivalent to function  i->4i
 for i=1:33
     slowcalc = sqrt(i) .* randn(3,23) .+ i
     slownice = DimArray(slowcalc, [:a, :b], [Dict(1=>"one", 2=>"two", 3=>"three")], :stuff )
-                                            ## equivalent to  i->Dict(...)[i]
+                                            # equivalent to  i->Dict(...)[i]
     rem(i,saveevery)==0 && push!(list4, slownice)
 end
 nest(list4)
 
-plot!(mean(nest(list4), :b)', s=:dash)
+plot!(mean(nest(list4), dims=:b)', s=:dash)
 ```
-If you do not provide a name for a dimension (or give an empty string "") then you can still refer to it
-by default names like `size(x, :row) == size(x,1)` or `maximum(y, :col)` etc. However these defaults are not stored,
-and not manipulated by `transpose(x)` or `kron(x,y)`.
+
+If you do not provide a name for a dimension (or give an empty string "") 
+then you can still refer to it by default names like `size(x, :row) == size(x,1)` or `maximum(y, :col)` etc. 
+However these defaults are not stored, and not manipulated by `transpose(x)` or `kron(x,y)`.
 
 For now, the list of functions supported is:
 
-* `sum, mean, std, maximum, minimum, squeeze`: all can be called with a dimension's name.
-    and then squeeze that dimension, like `mean(..., :b)` above.
-    They can also be called with a list of dimensions: `sum(x, [1,:c])` etc.
-* `slicedim, size` understand a dimension's name.
+* `DimArray`, `DimVector`, `DimMatrix` create one, taking names and functions for dimensions in the order given.
+* `dictvector` defines a DimVector whose function is a Dict. 
+* `nest` converts arrays of arrays, and `squeeze` drops dimensions of size 1. 
+
+and these built-in functions:
+
+* `selectdim, size` understand a dimension's name.
+* `sum, maximum, minimum, dropdims` and `Statistics.mean, std`: all can be called with a dimension's name, in which case by default `squeeze=true` on that dimension, like `mean(..., dims=:b)` above.
+    They can also be called with a list of dimensions: `sum(x, dims=[1,:c])` etc.
 * `push!, append!, hcat, vcat, transpose, ctranspose, permutedims`.
-* `broadcast`, both by scalars `DimArray(rand(3,3)) .+ 10`
-    and for combining arrays `DimArray(rand(3),"rand col") .* DimArray(ones(1,4),"", "one row")`.
-* Matrix multiplication `*` will warn (once) if you multiply along directions with mismatched names...
-    unsure if that's a good idea?
+* Matrix multiplication `*` will warn (once) if you multiply along directions with mismatched names... which may be a terrible idea.
     And `kron`ecker products produce new names like `:a_b`.  
-* `collect`, implicitly used by comprehensions like `[ sqrt(n) for n in DimVector(1:10, "int")' ]`.
+* `collect`, implicitly used by comprehensions like `[ sqrt(n) for n in DimVector(1:10, "int")' ]` which thus inherit the names of the array being iterated over.
 
-Since `DimArray <: AbstractArray` anything else will fall back on their methods,
-and forget the dimension labels. Functions exported by `using DimArrays` are:
+Since `DimArray <: AbstractArray` anything else will fall back on their methods, and forget the dimension labels. 
 
-* `DimArray`, `DimVector`, `DimMatrix`, `nest`.
-
-Of course I'm not the first person to have this idea, nor to write up his own package...
-as I discovered half way into writing this. Both [NamedArrays](https://github.com/davidavdav/NamedArrays.jl)
-and [AxisArrays](https://github.com/JuliaArrays/AxisArrays.jl) do something similar.
-This package is lighter-weight, and implements a few things I wanted like `push!` (both of the others are immutable),
-and `plot` recipes, but makes little attempt to be high-performance.
-You can `convert` to these via `AxisArray(a::DimArray)` and `NamedArray(a::DimArray)`, preserving axis (dimension) names.
-
-For other views on vectors of arrays etc, see  [RecursiveArrayTools](https://github.com/JuliaDiffEq/RecursiveArrayTools.jl)
-and [JuliennedArrays](https://github.com/bramtayl/JuliennedArrays.jl).
+See also:
+* [NamedArrays](https://github.com/davidavdav/NamedArrays.jl)
+* [AxisArrays](https://github.com/JuliaArrays/AxisArrays.jl)
+* [RecursiveArrayTools](https://github.com/JuliaDiffEq/RecursiveArrayTools.jl)
+* [JuliennedArrays](https://github.com/bramtayl/JuliennedArrays.jl)
 
 ToDo:
-* Maybe make things like `x[:, 1:10:end]` update the functions.
+* Make things like `x[:, 1:10:end]` and `hcat(a,b)` update the functions correctly.
 * Figure out Julia 0.7's new broadcasting machinery.
 
 Michael Abbott,
-January 2018, mostly.
+January 2018, mostly (as I had a grant to write).
 
 
 [![Build Status](https://travis-ci.org/mcabbott/DimArrays.jl.svg?branch=master)](https://travis-ci.org/mcabbott/DimArrays.jl)
