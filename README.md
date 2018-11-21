@@ -17,15 +17,17 @@ end
 
 list3 = nest(list, :iter)   # now i is the 3rd index, and named "iter"
 
-mean(list3, :iter)          # equivalent to dropdims(mean(list3, dims=3), dims=3)
+using Statistics
+
+mean(list3, dims=:iter)     # equivalent to dropdims(mean(list3, dims=3), dims=3)
 ```
 For quick plots, dimension names are used for axes and series: 
 ```julia
 using Plots
 
-plot(slicedim(list3, :b, 1)' , legend=:bottomright)
+plot(selectdim(list3, :b, 1)' , legend=:bottomright)
 ```
-Here `slicedim(list3, :b, 1) == list3[:,1,:]` in contents, but retains the labels.
+Here `selectdim(list3, :b, 1) == list3[:,1,:]` in contents, but retains the labels.
 
 Besides each dimension's name (which is a Symbol, strings will be converted) it can also store a function, which is used in plotting to scale the axes etc. 
 (But only the output, `getindex` uses original integer indices).
@@ -43,7 +45,7 @@ for i=1:33
 end
 nest(list4)
 
-plot!(mean(nest(list4), :b)', s=:dash)
+plot!(mean(nest(list4), dims=:b)', s=:dash)
 ```
 
 If you do not provide a name for a dimension (or give an empty string "") 
@@ -52,10 +54,15 @@ However these defaults are not stored, and not manipulated by `transpose(x)` or 
 
 For now, the list of functions supported is:
 
+* `DimArray`, `DimVector`, `DimMatrix` create one, taking names and functions for dimensions in the order given.
+* `dictvector` defines a DimVector whose function is a Dict. 
 * `nest` converts arrays of arrays, and `squeeze` drops dimensions of size 1. 
-* `slicedim, size` understand a dimension's name.
-* `sum, mean, std, maximum, minimum, dropdims`: all can be called with a dimension's name, in which case by default `squeeze=true` on that dimension, like `mean(..., :b)` above.
-    They can also be called with a list of dimensions: `sum(x, [1,:c])` etc.
+
+and these built-in functions:
+
+* `selectdim, size` understand a dimension's name.
+* `sum, maximum, minimum, dropdims` and `Statistics.mean, std`: all can be called with a dimension's name, in which case by default `squeeze=true` on that dimension, like `mean(..., dims=:b)` above.
+    They can also be called with a list of dimensions: `sum(x, dims=[1,:c])` etc.
 * `push!, append!, hcat, vcat, transpose, ctranspose, permutedims`.
 * Matrix multiplication `*` will warn (once) if you multiply along directions with mismatched names... which may be a terrible idea.
     And `kron`ecker products produce new names like `:a_b`.  
