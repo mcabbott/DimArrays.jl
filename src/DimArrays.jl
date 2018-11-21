@@ -1,6 +1,6 @@
 module DimArrays
 
-export DimArray, DimVector, DimMatrix, dictvector, name!, nest
+export DimArray, DimVector, DimMatrix, dictvector, name!, nest, squeeze
 
 const NameEl = Union{Symbol,Nothing}
 const FuncEl = Union{Function,Dict,Nothing}
@@ -244,16 +244,7 @@ function dropdims(a::DimArray; dims::Union{Int,Symbol,TupOrVec}, verbose=false, 
     return out
 end
 
-## Can't dispatch on keyword... 
-# function dropdims(a::DimArray; dims::AbstractVector, kw...)
-#     length(dims)==1 && return dropdims(a; dims=dims[1], kw...)
-#     dropdims(dropdims(a; dims=dims[end], kw...); dims=dims[1:end-1], kw...)
-# end
-#
-# function dropdims(a::DimArray; kw...)
-#     which = [d for d=1:ndims(a) if size(a,d)==1]
-#     dropdims(a; dims=which, kw...)
-# end
+squeeze(a::AbstractArray; kw...) = dropdims(a; dims=Tuple(findall(size(a) .== 1)), kw...)
 
 function selectdim(a::DimArray, d::Union{Symbol, Int}, i::Int)
     d = ensuredim(a,d)
@@ -292,18 +283,6 @@ for op in (:sum, :mean, :std, :maximum, :minimum )
             verbose && info("""$(($op))-ed along :$(dname(a,dims)), leaving directions $(dnames(out)) size $(size(out))""")
             return out
         end
-
-        ## Can't dispatch on keyword. 
-        # function ($op)(a::DimArray; dims::Symbol, squeeze=true, verbose=false, kw...) ## different defaults!
-        #     d = ensuredim(a,dims)
-        #     return ($op)(a; dims=d, squeeze=squeeze, verbose=verbose, kw...)
-        # end
-        #
-        # function ($op)(a::DimArray; dims::AbstractVector, kw...)
-        #     length(dims)==1 && return ($op)(a; dims=dims[1], kw...)
-        #     b = ($op)(a; dims=dims[end], kw...)
-        #     return ($op)(b; dims=dims[1:end-1], kw...)
-        # end
 
     end # @eval
 end
@@ -562,7 +541,7 @@ end
 
 function stringone(n, f=identity)
     f(n) isa Integer && return string(f(n))
-    f(n) isa Number && return string(round(f(n),3))
+    f(n) isa Number && return string(round(f(n), digits=3))
     return string(f(n))
 end
 
