@@ -7,9 +7,9 @@ const FuncEl = Union{Function,Dict,Nothing}
 
 mutable struct DimArray{T,N,TT} <: AbstractArray{T,N}
     array::TT
-    dnames::NTuple{N,NameEl}    ## dimension names: symbol or nothing
-    ifuncs::NTuple{N,FuncEl}    ## index functions: dictionary if bounded
-    cname::NameEl               ## content name, if any
+    dnames::NTuple{N,NameEl}    # dimension names: symbol or nothing
+    ifuncs::NTuple{N,FuncEl}    # index functions: dictionary if bounded
+    cname::NameEl               # content name, if any
 end
 
 using LinearAlgebra
@@ -30,12 +30,13 @@ naked(a::AbstractArray) = a
 dname(a::DimArray, d::Int) = a.dnames[d]==nothing ? defname(d) : a.dnames[d]
 dname(a::AbstractArray, d::Int) = defname(d)
 dnames(a::AbstractArray) = [ dname(a,d) for d=1:ndims(a) ]
+dname(a::AbstractArray, dims::Tuple) = join([dname(a,d) for d in dims], ", ") # for @info verbose
 
 function defname(d::Int)
     d==1 && return :row
     d==2 && return :col
     d==3 && return :page
-    d==4 && return Symbol(:dim,d)
+    return Symbol(:dim,d)
 end
 
 function ifunc(a::DimArray, d::Int)
@@ -59,7 +60,7 @@ using Lazy: @forward
 ####################
 
 ensurefuncordict(f::Function) = f
-ensurefuncordict(f::Dict) = f ## ifunc handles this
+ensurefuncordict(f::Dict) = f # ifunc handles this
 ensurefuncordict(f::Number) = f==1 ? identity : (i -> i*f)
 
 using Base.Iterators: repeated
@@ -104,7 +105,7 @@ function DimArray(x::TT, tup::Vararg; label = nothing) where TT<:AbstractArray{T
         elseif isa(z, Tuple)
             @warn "DimArray is ignoring tuple $z, this really shouldn't happen!"
         elseif z==nothing
-            ## ignore, no problem!
+            # ignore, no problem!
         end
     end
     DimArray{T,N,TT}(x, NTuple{N,NameEl}(names), NTuple{N,FuncEl}(funcs), label)
@@ -139,7 +140,7 @@ DimVector(T::Type=Any, rest...) = DimArray(T[], rest...)
 DimArray(s::SymbolOrString, rest...) = DimArray([], s, rest...)
 DimVector(s::SymbolOrString, rest...) = DimArray([], s, rest...)
 
-## avoid the above splatting for perfectly formed case, for functions below -- will fail on wrong-length tuples
+# avoid the above splatting for perfectly formed case, for functions below -- will fail on wrong-length tuples
 DimArray(x::TT, dnames::Tuple, ifuncs::Tuple, cname::NameEl) where TT <: AbstractArray{T,N} where {T,N} =
     DimArray{T,N,TT}(x, dnames, ifuncs, cname);
 
@@ -195,7 +196,7 @@ function push!(a::DimVector, x, s::SymbolOrString)
         a.ifuncs[1][length(a)] = string(s)
     end
     if a.ifuncs[1] isa Function
-        @warn "push! can't append index label $s as dimension index is not a Dict" # once=true
+        @warn "push! can't append index label $s as dimension index is not a Dict" maxlog=2
     end
     a
 end
@@ -240,7 +241,7 @@ function dropdims(a::DimArray; dims::Union{Int,Symbol,TupOrVec}, verbose=false, 
     d = ensuredim(a,dims)
     d==1 && ndims(a)==1 && !zerodim && return a[1]
     out = DimArray(Base.dropdims(a.array; dims=d), dropd(a.dnames,d), dropd(a.ifuncs,d), a.cname)
-    verbose && info("""squeezed along :$(dname(a,d)), leaving directions $(dnames(out)) size $(size(out))""")
+    verbose && @info "squeezed along $(dname(a,d)), leaving directions $(join(dnames(out),", ")) size $(size(out))"
     return out
 end
 
@@ -280,7 +281,7 @@ for op in (:sum, :mean, :std, :maximum, :minimum )
                 out = DimArray(data, a.dnames, a.ifuncs, a.cname)
             end
 
-            verbose && info("""$(($op))-ed along :$(dname(a,dims)), leaving directions $(dnames(out)) size $(size(out))""")
+            verbose && @info "$(($op))-ed along $(dname(a,dims)), leaving directions $(join(dnames(out),", ")) size $(size(out))"
             return out
         end
 
@@ -344,10 +345,10 @@ function reconcile(list, N)
     funcs = Vector{FuncEl}(repeated(nothing, N) |> collect)
     label = nothing
     n=0; f=0;
-    for a in reverse(list) ## overwrite with earliest names
+    for a in reverse(list) # overwrite with earliest names
         if isa(a, DimArray)
             for d=1:ndims(a)
-                if ifunc(a,d) !== identity ## then adopt this one
+                if ifunc(a,d) !== identity # then adopt this one
                     funcs[d] = a.ifuncs[d]
                 end
                 if a.dnames[d] !== nothing && a.dnames[d] !== :transpose
@@ -358,8 +359,8 @@ function reconcile(list, N)
         end
     end
     for d=2:N
-        if names[d] != nothing && findfirst(isequal(names[d]), names[1:d-1])!=nothing ## if symbol already used, add a prime...
-            for dd=N:-1:d ## ... to all later occurances too
+        if names[d] != nothing && findfirst(isequal(names[d]), names[1:d-1])!=nothing # if symbol already used, add a prime...
+            for dd=N:-1:d # ... to all later occurances too
                 if names[dd]==names[d]
                     names[dd] = Symbol(names[d], "′")
                 end
@@ -377,14 +378,14 @@ import Base: append!, hcat, vcat, cat
 
 for op in (:+, :-, :append!)
     @eval begin
-        ## adding a boring array
+        # adding a boring array
         ($op)(a::DimArray{T1,N}, b::AbstractArray{T2,N}) where {T1<:Number,T2<:Number,N} =
             DimArray(($op)(a.array, b), a.dnames, a.ifuncs, a.cname)
 
         ($op)(b::AbstractArray{T1,N}, a::DimArray{T2,N}) where {T1<:Number,T2<:Number,N} =
             DimArray(($op)(b, a.array), a.dnames, a.ifuncs, a.cname)
 
-        ## adding two DimArrays
+        # adding two DimArrays
         ($op)(a::DimArray{T1}, b::DimArray{T2}) where {T1<:Number, T2<:Number} =
             DimArray(($op)(a.array, b.array), reconcile((a,b),ndims(a))...)
     end # @eval
@@ -404,7 +405,7 @@ import Base: *, kron
 
 function *(a::DimArray, b::DimArray)
     a.dnames[end]!=b.dnames[1] && a.dnames[end]!=nothing && b.dnames[1]!=nothing &&
-        @warn "multiplying along dimensions with mismatched names" # once=true
+        @warn "multiplying along dimensions with mismatched names" maxlog=2
     names = (a.dnames[1:end-1]..., b.dnames[2:end]...)
     funcs = (a.ifuncs[1:end-1]..., b.ifuncs[2:end]...)
     DimArray(a.array * b.array, names, funcs, a.cname )
@@ -454,9 +455,9 @@ nest(sym::Symbol) = vec -> nest(vec, sym)
 
 nest(vec::AbstractVector, sym::Symbol) = nest(DimArray(vec,sym))
 
-function nest(vec::AbstractVector) ## Allow Vector{Any} but assume contents is all the same Array
+function nest(vec::AbstractVector) # Allow Vector{Any} but assume contents is all the same Array
     x1 = first(vec)
-    isa(x1,AbstractArray) || return vec ## nothing to do
+    isa(x1,AbstractArray) || return vec # nothing to do
 
     out = similar(x1, size(x1)..., length(vec), )
     for (i, x) in enumerate(vec)
@@ -466,19 +467,19 @@ function nest(vec::AbstractVector) ## Allow Vector{Any} but assume contents is a
     if isa(vec, DimArray) && isa(x1, DimArray)
         return DimArray(out, (x1.dnames..., vec.dnames[1]), (x1.ifuncs..., vec.ifuncs[1]), x1.cname)
 
-    elseif isa(vec, DimArray) ## and "x1" is not -- use nothings
+    elseif isa(vec, DimArray) # and "x1" is not -- use nothings
         none = repeated(nothing, ndims(x1)) |> collect
         return DimArray(out, (none..., vec.dnames[1]), (none..., vec.ifuncs[1]), nothing)
 
-    elseif isa(x1, DimArray) ## and "vec" is not -- use "nest"
+    elseif isa(x1, DimArray) # and "vec" is not -- use "nest"
         return DimArray(out, (x1.dnames..., :nest), (x1.ifuncs..., nothing), x1.cname)
 
-    else ## no DimArrays at all
+    else # no DimArrays at all
         return out
     end
 end
 
-## that's based on Flux.batch
+# that's based on Flux.batch
 batchindex(xs, i) = (reverse(Base.tail(reverse(axes(xs))))..., i)
 
 function nest(arr::AbstractArray{D}) where {D}
@@ -516,8 +517,8 @@ function Base.summary(io::IO, a::DimArray)
     end
     for d=1:ndims(a)
         if a.dnames[d]==nothing #|| a.dnames[d]==:transpose
-                    print(io, "   ⭒ ") ## different symbol for default names
-        elseif d==1 print(io, "   ⬙ ") ## ⇁⇂
+                    print(io, "   ⭒ ") # different symbol for default names
+        elseif d==1 print(io, "   ⬙ ") # ⇁⇂
         elseif d==2 print(io, "   ⬗ ")
         else        print(io, "   ◇ ")
         end
@@ -554,7 +555,7 @@ using RecipesBase
 @recipe function ff(a::DimVector)
     label --> ""
 
-    ## first dim is x axis
+    # first dim is x axis
     if a.dnames[1] != nothing
         xaxis --> string(dname(a,1))
     end
@@ -565,13 +566,13 @@ end
 
 @recipe function ff(a::DimMatrix)
 
-    ## first dim is x axis
+    # first dim is x axis
     xaxis --> string(dname(a,1))
     xlist = ifunc(a,1).(1:size(a,1))
 
-    ## second dim labels series
+    # second dim labels series
     ylist = string(dname(a,2))*" = " .* string.(ifunc(a,2).(1:size(a,2)))
-    label --> reshape(ylist, 1,:) ## because series labels must be cols of a matrix, not el of vector
+    label --> reshape(ylist, 1,:) # because series labels must be cols of a matrix, not el of vector
 
     if haslabel(a)
         yaxis --> string(a.cname)
@@ -584,29 +585,30 @@ end
 ### Conversions ###
 ###################
 
-# using Requires
-#
-# @require NamedArrays begin
-#     using NamedArrays: NamedArray
-#
-#     axestuple(a::DimArray) = Tuple([f.(collect(1:size(a,d))) for (d,f) in enumerate(ifuncs(a))])
-#     nametuple(a::DimArray) = Tuple(dnames(a))
-#     Base.convert(::Type{NamedArray}, a::DimArray) = NamedArray(a.array, axestuple(a), nametuple(a))
-#     NamedArray(a::DimArray) = convert(NamedArray, a)
-#
-#     ## TODO reverse conversion?
-# end
-#
-# @require AxisArrays begin
-#     using AxisArrays: AxisArray, Axis
-#
-#     axislist(a::DimArray) = [ Axis{dname(a,d)}( ifunc(a,d).(collect(1:size(a,d)) ) ) for d=1:ndims(a) ]
-#     Base.convert(::Type{AxisArray}, a::DimArray) = AxisArray(a.array, axislist(a)...)
-#     AxisArray(a::DimArray) = convert(AxisArray, a)
-#
-#     ## TODO reverse conversion?
-# end
+using Requires
 
+function __init__()
+
+    @require NamedArrays = "86f7a689-2022-50b4-a561-43c23ac3c673" begin
+        using NamedArrays: NamedArray
+
+        axestuple(a::DimArray) = Tuple([ifunc(a,d).(collect(1:size(a,d))) for d=1:ndims(a)])
+        nametuple(a::DimArray) = Tuple(dnames(a))
+        Base.convert(::Type{NamedArray}, a::DimArray) = NamedArray(a.array, axestuple(a), nametuple(a))
+        NamedArray(a::DimArray) = convert(NamedArray, a)
+
+    end
+
+    @require AxisArrays = "39de3d68-74b9-583c-8d2d-e117c070f3a9" begin
+        using AxisArrays: AxisArray, Axis
+
+        axislist(a::DimArray) = [ Axis{dname(a,d)}( ifunc(a,d).(1:size(a,d) ) ) for d=1:ndims(a) ]
+        Base.convert(::Type{AxisArray}, a::DimArray) = AxisArray(a.array, axislist(a)...)
+        AxisArray(a::DimArray) = convert(AxisArray, a)
+
+    end
+
+end
 
 ### End ###
 ###########
